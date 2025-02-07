@@ -23,7 +23,8 @@ class Ship:
         self.position = QVector2D(x, y)
         self.damage, self.health, self.speed, self.name = ship_data
         self.team = team
-        self.image = 'null'
+        self.selected = False
+        self.image_obj = None
 
         if team == "green":
             if ship_data == ShipData.ENG_DESTROYER:
@@ -41,7 +42,19 @@ class Ship:
                 self.image = Sprite.RED_BATTLESHIP
 
     def place(self, api: GameAPI):
-        self.image = api.addImage(self.image, self.position.x(), self.position.y())
+        self.image_obj = api.addImage(self.image, self.position.x(), self.position.y())
+
+    def toggle_selection(self, api: GameAPI):
+
+        self.selected = not self.selected
+        if self.selected:
+            self.image_obj = api.addImage(Sprite.SELECTION, self.position.x(), self.position.y())
+            self.image_obj.show()
+            api.addMessage(f"{self.name} selected")
+        else:
+            self.image_obj.hide()
+            self.image_obj = api.addImage(self.image, self.position.x(), self.position.y())
+            api.addMessage(f"{self.name} deselected")
 
 
 class Game(object):
@@ -53,7 +66,8 @@ class Game(object):
         self.islands = []
         self.green_ships = []
         self.red_ships = []
-        self.move = True
+        self.move = False
+        self.selected_ship = None
 
     def start(self, api: GameAPI) -> None:
         api.addMessage('--- GREEN TEAM MOVE ---')
@@ -70,14 +84,12 @@ class Game(object):
                 island.place(api)
                 self.islands.append(island)
                 occupied_positions.add((x, y))
-        #api.addMessage(f"Places {len(self.islands)} obstacles")
 
         # Расстановка кораблей
         self.place_ships(api, "green", 0, occupied_positions,
                          [ShipData.ENG_DESTROYER, ShipData.ENG_CRUISER, ShipData.ENG_BATTLESHIP])
         self.place_ships(api, "red", GRID_SIZE - 1, occupied_positions,
                          [ShipData.GER_DESTROYER, ShipData.GER_CRUISER, ShipData.GER_BATTLESHIP])
-        #api.addMessage("Корабли расставлены.")
 
     def place_ships(self, api: GameAPI, team, row, occupied_positions, ship_data_list):
         for i, ship_data in enumerate(ship_data_list):
@@ -95,32 +107,35 @@ class Game(object):
     def click(self, api: GameAPI, x: int, y: int) -> None:
         api.addMessage('click {}, {}'.format(x, y))
         ship_obj: Ship = None
-        island_found  = False
+        island_found = False
 
         for island in self.islands:
-            #api.addMessage(f"Check obstacle {int(island.position.x())} {int(island.position.y())} must be == {x} {y}")
             if int(island.position.x()) == x and int(island.position.y()) == y:
-                island_found  = True
+                island_found = True
                 break
-        # True - это ход зеленых, False - это ход красных
 
         if self.move:
             for ship in self.green_ships:
-                #api.addMessage(f"Check ship {int(ship.position.x())} {int(ship.position.y())} must be == {x} {y}")
                 if int(ship.position.x()) == x and int(ship.position.y()) == y:
                     ship_obj = ship
                     break
         else:
             for ship in self.red_ships:
-                #api.addMessage(f"Check ship {int(ship.position.x())} {int(ship.position.y())} must be == {x} {y}")
                 if int(ship.position.x()) == x and int(ship.position.y()) == y:
                     ship_obj = ship
                     break
 
-        if island_found :
-            api.addMessage('This is a obstacle')
+        if island_found:
+            api.addMessage('This is an obstacle')
         else:
             if ship_obj is not None:
-                api.addMessage(f'This is {ship_obj.name} HP: {ship_obj.health} DMG: {ship_obj.damage} SPD: {ship_obj.speed}')
+                if self.selected_ship == ship_obj:
+                    ship_obj.toggle_selection(api)
+                    self.selected_ship = None
+                else:
+                    if self.selected_ship:
+                        self.selected_ship.toggle_selection(api)
+                    ship_obj.toggle_selection(api)
+                    self.selected_ship = ship_obj
             else:
-                api.addMessage("This is empty cell")
+                api.addMessage("This is an empty cell")
