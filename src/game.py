@@ -6,13 +6,16 @@ from constants import Sprite, GRID_SIZE
 from PyQt5.QtGui import QVector2D
 from shipData import ShipData
 
-
+# Класс Island описывающий остров-препятствие и его поведение
 class Island:
+
+    # Инициализация препятствия-острова
     def __init__(self, x, y, obstacle_type):
         self.position = QVector2D(x, y)
         self.obstacle_type = obstacle_type
         self.image = Sprite.CLIFF if obstacle_type else Sprite.ISLAND
 
+    # Появление препятствия-острова
     def place(self, api: GameAPI):
         api.addImage(self.image, self.position.x(), self.position.y())
 
@@ -29,7 +32,10 @@ TEAM_SHIPS = {
     }
 }
 
+# Класс Ship описывающий корабль и его поведение
 class Ship:
+
+    # Инициализация корабля
     def __init__(self, x, y, ship_data, team):
         self.position = QVector2D(x, y)
         self.damage, self.health, self.speed, self.name = ship_data
@@ -60,12 +66,15 @@ class Ship:
                 self.image = Sprite.RED_BATTLESHIP
                 self.ship_type = 'Battleship'
 
+    # Атака корабля
     def attack(self, api: GameAPI, ships, big_obstacles):
         api.addMessage(f"\n{self.name} attacks")
-
         attacked_ships = []
+
+        # Проверка попадание кораблей противника в радиус атаки
         if self.ship_type == 'Destroyer':
             for ship in ships:
+                # Проверка на атаку вокруг себя по вертикали и горизонтали
                 if ship.position.x() == (self.position.x() + 1) and ship.position.y() == self.position.y():
                     attacked_ships.append(ship)
                 if ship.position.x() == (self.position.x() - 1) and ship.position.y() == self.position.y():
@@ -76,6 +85,7 @@ class Ship:
                     attacked_ships.append(ship)
         else:
             for ship in ships:
+                # Проверка на атаку линиями по вертикали и горизонтали, с учетом больших островов (Cliff)
                 if ship.position.x() == self.position.x():
                     min_y, max_y = sorted([int(self.position.y()), int(ship.position.y())])
                     if any((self.position.x(), y) in big_obstacles for y in range(min_y + 1, max_y)):
@@ -87,6 +97,7 @@ class Ship:
                         continue
                     attacked_ships.append(ship)
 
+        # Проверка на атаку корабля
         if len(attacked_ships) > 0:
             deal_damage = int(self.damage / len(attacked_ships))
             # api.addMessage(f"Ships attacked - {len(attacked_ships)} so damage is {int(deal_damage)}")
@@ -107,6 +118,7 @@ class Ship:
                     else:
                         ship.take_damage(api, deal_damage, self.name)
 
+    # Получение урона
     def take_damage(self, api: GameAPI, deal_damage, name):
         self.health = float(self.health) - float(deal_damage)
         self.update_marker()
@@ -119,13 +131,16 @@ class Ship:
         api.addMessage(
             f"{name} deals {int(deal_damage)} damage to {self.name} on {characters[self.position.x()]}{int(self.position.y() + 1)}\n{self.name} current HP is {int(self.health)}")
 
+    # Смерть корабля
     def destroy(self):
         self.ship_marker_obj.hide()
         self.isAlive = False
 
+    # Появление на карте
     def place(self, api: GameAPI):
         self.ship_marker_obj = api.addMarker(self.image, self.position.x(), self.position.y())
 
+    # Выбор корабля как активного
     def toggle_selection(self, api: GameAPI):
         self.selected = not self.selected
         if self.selected:
@@ -135,12 +150,16 @@ class Ship:
             self.ship_marker_obj.setSelected(False)
             # api.addMessage(f"{self.name} was deselected")
 
+    # Передвижение корабля
     def move(self, api: GameAPI, new_x, new_y, occupied_positions):
         distance = abs(self.position.x() - new_x) + abs(self.position.y() - new_y)
+
+        # Расстояние перемещения больше чем скорость корабля
         if distance > self.speed:
             api.addMessage(f"Target cell too far, your speed is {self.speed}, distance is {int(distance)}")
             return False
 
+        # Перемещение на занятую клетку
         if (new_x, new_y) in occupied_positions:
             api.addMessage("Target cell is occupied already")
             return False
@@ -155,12 +174,14 @@ class Ship:
         api.addMessage(f"{self.name} moved to {characters[new_x]}{new_y + 1}")
         return True
 
+    # Обновить индикатор здоровья
     def update_marker(self):
         self.ship_marker_obj.setHealth(self.health / 100)
 
-
+# Класс Game описывающий игру и основное поведение
 class Game(object):
 
+    # Инициализация игры
     def __init__(self):
         self.api = None
         self.islands = []
@@ -172,10 +193,12 @@ class Game(object):
         self.occupied_positions = set()
         self.gameover = False
 
+    # Начало игры
     def start(self, api: GameAPI) -> None:
         api.addMessage('!!! GAME STARTED !!!\n\n--- GREEN TEAM MOVE ---')
         island_count = random.randint(1, 15)
 
+        # Цикл по размещению случайного количества островов-препятствий
         while len(self.islands) < island_count:
             x, y = random.randint(1, GRID_SIZE - 2), random.randint(0, GRID_SIZE - 1)
             if (x, y) not in self.occupied_positions:
@@ -191,6 +214,7 @@ class Game(object):
         self.place_ships(api, "red", GRID_SIZE - 1,
                          [ShipData.GER_DESTROYER, ShipData.GER_CRUISER, ShipData.GER_BATTLESHIP])
 
+    # Первая расстановка кораблей
     def place_ships(self, api: GameAPI, team, row, ship_data_list):
         for i, ship_data in enumerate(ship_data_list):
             y, x = (i * 2) + 1, row
@@ -203,16 +227,19 @@ class Game(object):
                 else:
                     self.red_ships.append(ship)
 
+    # Клик по клетке на карте
     def click(self, api: GameAPI, x: int, y: int) -> None:
         if not self.gameover:
             ship_obj = None
             island_found = False
 
+            # Проверка на клик по острову
             for island in self.islands:
                 if int(island.position.x()) == x and int(island.position.y()) == y:
                     island_found = True
                     break
 
+            # Проверка на клик по кораблю
             if self.move:
                 for ship in self.green_ships:
                     if int(ship.position.x()) == x and int(ship.position.y()) == y:
@@ -224,6 +251,7 @@ class Game(object):
                         ship_obj = ship
                         break
 
+            # Проверка на что нажал игрок
             if island_found:
                 api.addMessage('This is an obstacle')
             elif ship_obj is not None:
@@ -240,11 +268,13 @@ class Game(object):
                 if is_moved:
                     self.selected_ship.toggle_selection(api)
 
+                    # Атака кораблей противника после успешного хода
                     for ship in (self.green_ships if not self.move else self.red_ships):
                         ship.attack(api, self.red_ships if not self.move else self.green_ships,
                                     self.big_obstacles)
-
                     game_status = self.check_dead_ships()
+
+                    # Проверка на завершение игры
                     if game_status == 'Germany':
                         api.addMessage("\n\n!!! GERMANY (RED TEAM) WINS !!!\n\n")
                         self.gameover = True
@@ -253,12 +283,14 @@ class Game(object):
                         api.addMessage("\n\n!!! ENGLAND (GREEN TEAM) WINS !!!\n\n")
                         self.gameover = True
                         return
+
                     self.selected_ship = None
                     self.move = not self.move
                     api.addMessage('\n--- RED TEAM MOVE ---' if not self.move else '\n--- GREEN TEAM MOVE ---')
         else:
             api.addMessage("Game is over!")
 
+    # Проверка кораблей для удаления потонувших
     def check_dead_ships(self):
         for ship in self.green_ships:
             if not ship.isAlive:
